@@ -1,5 +1,7 @@
 import type { X402AgentPayment, X402PaymentConfig } from "@shared/x402";
 
+const X402_SERVICE_VERSION = "1.0.0";
+
 export class X402PaymentService {
   private config: X402PaymentConfig;
 
