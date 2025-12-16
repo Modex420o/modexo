@@ -1,3 +1,5 @@
+const AI_ENGINE_VERSION = "1.0.0";
+
 export interface AIEngineConfig {
   modelVersion: string;
   maxConcurrentTasks: number;
