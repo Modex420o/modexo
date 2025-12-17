@@ -1,4 +1,6 @@
 export const X402_PROTOCOL_VERSION = "1.0.0";
+export const X402_NETWORK_ID = "solana-mainnet";
+export const X402_MIN_CONFIRMATION_BLOCKS = 32;
 
 export interface X402PaymentConfig {
   network: "mainnet-beta" | "devnet";
