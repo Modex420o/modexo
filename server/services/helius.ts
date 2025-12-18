@@ -1,5 +1,63 @@
-const HELIUS_SERVICE_VERSION = "1.0.0";
+const HELIUS_SERVICE_VERSION = "1.1.0";
 const HELIUS_API_BASE = "https://api.helius.xyz";
+const REQUEST_TIMEOUT_MS = 15000;
+const MAX_REQUESTS_PER_SECOND = 10;
+const CACHE_TTL_MS = 30000;
+
+interface RateLimitState {
+  tokens: number;
+  lastRefill: number;
+}
+
+const rateLimiter: RateLimitState = {
+  tokens: MAX_REQUESTS_PER_SECOND,
+  lastRefill: Date.now(),
+};
+
+function refillTokens(): void {
+  const now = Date.now();
+  const elapsed = now - rateLimiter.lastRefill;
+  const tokensToAdd = Math.floor(elapsed / 1000) * MAX_REQUESTS_PER_SECOND;
+  
+  if (tokensToAdd > 0) {
+    rateLimiter.tokens = Math.min(MAX_REQUESTS_PER_SECOND, rateLimiter.tokens + tokensToAdd);
+    rateLimiter.lastRefill = now;
+  }
+}
+
+function canMakeRequest(): boolean {
+  refillTokens();
+  return rateLimiter.tokens > 0;
+}
+
+function consumeToken(): boolean {
+  if (!canMakeRequest()) return false;
+  rateLimiter.tokens--;
+  return true;
+}
+
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+}
+
+const requestCache = new Map<string, CacheEntry<unknown>>();
+
+function getCachedData<T>(key: string): T | null {
+  const entry = requestCache.get(key);
+  if (!entry) return null;
+  
+  if (Date.now() - entry.timestamp > CACHE_TTL_MS) {
+    requestCache.delete(key);
+    return null;
+  }
+  
+  return entry.data as T;
+}
+
+function setCachedData<T>(key: string, data: T): void {
+  requestCache.set(key, { data, timestamp: Date.now() });
+}
 
 interface HeliusTransaction {
   signature: string;
