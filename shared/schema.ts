@@ -152,7 +152,50 @@ export const AGENT_EXECUTION_STATUS = {
   RUNNING: "running",
   COMPLETED: "completed",
   FAILED: "failed",
+  CANCELLED: "cancelled",
+  TIMEOUT: "timeout",
 } as const;
+
+export const EXECUTION_PRIORITY = {
+  LOW: 1,
+  NORMAL: 5,
+  HIGH: 10,
+  CRITICAL: 20,
+} as const;
+
+export interface ExecutionMetadata {
+  startedAt: number;
+  completedAt?: number;
+  retryCount: number;
+  errorMessage?: string;
+  resourceUsage: {
+    cpuMs: number;
+    memoryMb: number;
+    apiCalls: number;
+  };
+}
+
+export function calculateExecutionDuration(metadata: ExecutionMetadata): number {
+  if (!metadata.completedAt) return Date.now() - metadata.startedAt;
+  return metadata.completedAt - metadata.startedAt;
+}
+
+export function isExecutionTerminal(status: string): boolean {
+  const terminalStates = [
+    AGENT_EXECUTION_STATUS.COMPLETED,
+    AGENT_EXECUTION_STATUS.FAILED,
+    AGENT_EXECUTION_STATUS.CANCELLED,
+    AGENT_EXECUTION_STATUS.TIMEOUT,
+  ];
+  return terminalStates.includes(status as any);
+}
+
+export function getExecutionPriorityLabel(priority: number): string {
+  if (priority >= EXECUTION_PRIORITY.CRITICAL) return "Critical";
+  if (priority >= EXECUTION_PRIORITY.HIGH) return "High";
+  if (priority >= EXECUTION_PRIORITY.NORMAL) return "Normal";
+  return "Low";
+}
 
 export const agentExecutions = pgTable("agent_executions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
