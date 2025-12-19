@@ -1,5 +1,63 @@
-const DEXSCREENER_SERVICE_VERSION = "1.0.0";
+const DEXSCREENER_SERVICE_VERSION = "1.1.0";
 const DEXSCREENER_API_BASE = "https://api.dexscreener.com";
+const RATE_LIMIT_REQUESTS = 30;
+const RATE_LIMIT_WINDOW_MS = 60000;
+const RESPONSE_CACHE_TTL = 15000;
+
+interface RequestMetrics {
+  count: number;
+  windowStart: number;
+  lastRequest: number;
+}
+
+const metrics: RequestMetrics = {
+  count: 0,
+  windowStart: Date.now(),
+  lastRequest: 0,
+};
+
+function checkRateLimit(): { allowed: boolean; retryAfter?: number } {
+  const now = Date.now();
+  
+  if (now - metrics.windowStart > RATE_LIMIT_WINDOW_MS) {
+    metrics.count = 0;
+    metrics.windowStart = now;
+  }
+  
+  if (metrics.count >= RATE_LIMIT_REQUESTS) {
+    const retryAfter = RATE_LIMIT_WINDOW_MS - (now - metrics.windowStart);
+    return { allowed: false, retryAfter };
+  }
+  
+  return { allowed: true };
+}
+
+function recordRequest(): void {
+  metrics.count++;
+  metrics.lastRequest = Date.now();
+}
+
+interface PriceCache {
+  [tokenAddress: string]: { price: number; timestamp: number };
+}
+
+const priceCache: PriceCache = {};
+
+function getCachedPrice(tokenAddress: string): number | null {
+  const cached = priceCache[tokenAddress];
+  if (!cached) return null;
+  
+  if (Date.now() - cached.timestamp > RESPONSE_CACHE_TTL) {
+    delete priceCache[tokenAddress];
+    return null;
+  }
+  
+  return cached.price;
+}
+
+function cachePrice(tokenAddress: string, price: number): void {
+  priceCache[tokenAddress] = { price, timestamp: Date.now() };
+}
 
 interface DexPair {
   chainId: string;
