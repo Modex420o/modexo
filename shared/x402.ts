@@ -1,6 +1,76 @@
-export const X402_PROTOCOL_VERSION = "1.0.0";
+export const X402_PROTOCOL_VERSION = "1.1.0";
 export const X402_NETWORK_ID = "solana-mainnet";
 export const X402_MIN_CONFIRMATION_BLOCKS = 32;
+export const TRANSACTION_EXPIRY_MS = 120000;
+
+interface TransactionState {
+  id: string;
+  status: "pending" | "confirmed" | "failed" | "expired";
+  createdAt: number;
+  confirmedAt?: number;
+  blockHeight?: number;
+  retryCount: number;
+}
+
+const transactionStates = new Map<string, TransactionState>();
+
+export function createTransaction(id: string): TransactionState {
+  const state: TransactionState = {
+    id,
+    status: "pending",
+    createdAt: Date.now(),
+    retryCount: 0,
+  };
+  transactionStates.set(id, state);
+  return state;
+}
+
+export function confirmTransaction(id: string, blockHeight: number): boolean {
+  const state = transactionStates.get(id);
+  if (!state || state.status !== "pending") return false;
+  
+  state.status = "confirmed";
+  state.confirmedAt = Date.now();
+  state.blockHeight = blockHeight;
+  return true;
+}
+
+export function failTransaction(id: string): boolean {
+  const state = transactionStates.get(id);
+  if (!state) return false;
+  
+  state.status = "failed";
+  return true;
+}
+
+export function checkExpiredTransactions(): string[] {
+  const now = Date.now();
+  const expired: string[] = [];
+  
+  for (const [id, state] of transactionStates) {
+    if (state.status === "pending" && now - state.createdAt > TRANSACTION_EXPIRY_MS) {
+      state.status = "expired";
+      expired.push(id);
+    }
+  }
+  
+  return expired;
+}
+
+export function getTransactionState(id: string): TransactionState | undefined {
+  return transactionStates.get(id);
+}
+
+export function clearCompletedTransactions(): number {
+  let cleared = 0;
+  for (const [id, state] of transactionStates) {
+    if (state.status === "confirmed" || state.status === "failed" || state.status === "expired") {
+      transactionStates.delete(id);
+      cleared++;
+    }
+  }
+  return cleared;
+}
 
 export interface X402PaymentConfig {
   network: "mainnet-beta" | "devnet";
