@@ -1,9 +1,57 @@
 import type { X402AgentPayment, X402PaymentConfig } from "@shared/x402";
 
-const X402_SERVICE_VERSION = "1.1.0";
+const X402_SERVICE_VERSION = "1.2.0";
 const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 1000;
 const PAYMENT_TIMEOUT_MS = 30000;
+const CONFIRMATION_THRESHOLD = 32;
+
+interface PaymentMetrics {
+  totalPayments: number;
+  successfulPayments: number;
+  failedPayments: number;
+  averageConfirmationTime: number;
+  totalVolume: number;
+}
+
+const paymentMetrics: PaymentMetrics = {
+  totalPayments: 0,
+  successfulPayments: 0,
+  failedPayments: 0,
+  averageConfirmationTime: 0,
+  totalVolume: 0,
+};
+
+function recordPaymentSuccess(amount: number, confirmationTime: number): void {
+  paymentMetrics.totalPayments++;
+  paymentMetrics.successfulPayments++;
+  paymentMetrics.totalVolume += amount;
+  
+  const prevTotal = paymentMetrics.averageConfirmationTime * (paymentMetrics.successfulPayments - 1);
+  paymentMetrics.averageConfirmationTime = (prevTotal + confirmationTime) / paymentMetrics.successfulPayments;
+}
+
+function recordPaymentFailure(): void {
+  paymentMetrics.totalPayments++;
+  paymentMetrics.failedPayments++;
+}
+
+function getPaymentMetrics(): PaymentMetrics {
+  return { ...paymentMetrics };
+}
+
+function calculateSuccessRate(): number {
+  if (paymentMetrics.totalPayments === 0) return 0;
+  return (paymentMetrics.successfulPayments / paymentMetrics.totalPayments) * 100;
+}
+
+function resetMetrics(): void {
+  paymentMetrics.totalPayments = 0;
+  paymentMetrics.successfulPayments = 0;
+  paymentMetrics.failedPayments = 0;
+  paymentMetrics.averageConfirmationTime = 0;
+  paymentMetrics.totalVolume = 0;
+}
 
 interface PaymentResult {
   success: boolean;
