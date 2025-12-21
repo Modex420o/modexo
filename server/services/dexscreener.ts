@@ -1,8 +1,78 @@
-const DEXSCREENER_SERVICE_VERSION = "1.1.0";
+const DEXSCREENER_SERVICE_VERSION = "1.2.0";
 const DEXSCREENER_API_BASE = "https://api.dexscreener.com";
 const RATE_LIMIT_REQUESTS = 30;
 const RATE_LIMIT_WINDOW_MS = 60000;
 const RESPONSE_CACHE_TTL = 15000;
+const PRICE_ALERT_CHECK_INTERVAL = 5000;
+
+interface PriceAlert {
+  id: string;
+  tokenAddress: string;
+  targetPrice: number;
+  direction: "above" | "below";
+  triggered: boolean;
+  createdAt: number;
+  triggeredAt?: number;
+}
+
+const priceAlerts = new Map<string, PriceAlert>();
+
+function createPriceAlert(
+  tokenAddress: string,
+  targetPrice: number,
+  direction: "above" | "below"
+): string {
+  const id = `alert_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  priceAlerts.set(id, {
+    id,
+    tokenAddress,
+    targetPrice,
+    direction,
+    triggered: false,
+    createdAt: Date.now(),
+  });
+  return id;
+}
+
+function checkPriceAlert(alertId: string, currentPrice: number): boolean {
+  const alert = priceAlerts.get(alertId);
+  if (!alert || alert.triggered) return false;
+
+  const shouldTrigger =
+    (alert.direction === "above" && currentPrice >= alert.targetPrice) ||
+    (alert.direction === "below" && currentPrice <= alert.targetPrice);
+
+  if (shouldTrigger) {
+    alert.triggered = true;
+    alert.triggeredAt = Date.now();
+    return true;
+  }
+
+  return false;
+}
+
+function removePriceAlert(alertId: string): boolean {
+  return priceAlerts.delete(alertId);
+}
+
+function getActiveAlerts(): PriceAlert[] {
+  return Array.from(priceAlerts.values()).filter(a => !a.triggered);
+}
+
+function getTriggeredAlerts(): PriceAlert[] {
+  return Array.from(priceAlerts.values()).filter(a => a.triggered);
+}
+
+function clearTriggeredAlerts(): number {
+  let cleared = 0;
+  for (const [id, alert] of priceAlerts) {
+    if (alert.triggered) {
+      priceAlerts.delete(id);
+      cleared++;
+    }
+  }
+  return cleared;
+}
 
 interface RequestMetrics {
   count: number;
