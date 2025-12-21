@@ -1,8 +1,89 @@
-const POLYMARKET_SERVICE_VERSION = "1.1.0";
+const POLYMARKET_SERVICE_VERSION = "1.2.0";
 const GAMMA_API = "https://gamma-api.polymarket.com";
 const MIN_MARKET_VOLUME = 10000;
 const CONFIDENCE_THRESHOLD = 0.65;
 const MAX_MARKETS_TO_ANALYZE = 50;
+const POSITION_TRACKING_INTERVAL = 30000;
+
+interface PositionTracker {
+  walletId: string;
+  positions: TrackedPosition[];
+  lastUpdated: number;
+  totalPnL: number;
+}
+
+interface TrackedPosition {
+  marketId: string;
+  outcome: string;
+  entryPrice: number;
+  currentPrice: number;
+  size: number;
+  unrealizedPnL: number;
+}
+
+const trackedWallets = new Map<string, PositionTracker>();
+
+function trackWallet(walletId: string): boolean {
+  if (trackedWallets.has(walletId)) return false;
+  trackedWallets.set(walletId, {
+    walletId,
+    positions: [],
+    lastUpdated: Date.now(),
+    totalPnL: 0,
+  });
+  return true;
+}
+
+function untrackWallet(walletId: string): boolean {
+  return trackedWallets.delete(walletId);
+}
+
+function updatePosition(
+  walletId: string,
+  marketId: string,
+  outcome: string,
+  entryPrice: number,
+  currentPrice: number,
+  size: number
+): void {
+  const tracker = trackedWallets.get(walletId);
+  if (!tracker) return;
+
+  const existingIndex = tracker.positions.findIndex(
+    p => p.marketId === marketId && p.outcome === outcome
+  );
+
+  const unrealizedPnL = (currentPrice - entryPrice) * size;
+  const position: TrackedPosition = {
+    marketId,
+    outcome,
+    entryPrice,
+    currentPrice,
+    size,
+    unrealizedPnL,
+  };
+
+  if (existingIndex >= 0) {
+    tracker.positions[existingIndex] = position;
+  } else {
+    tracker.positions.push(position);
+  }
+
+  tracker.lastUpdated = Date.now();
+  tracker.totalPnL = tracker.positions.reduce((sum, p) => sum + p.unrealizedPnL, 0);
+}
+
+function getTrackedWallets(): string[] {
+  return Array.from(trackedWallets.keys());
+}
+
+function getWalletPositions(walletId: string): TrackedPosition[] {
+  return trackedWallets.get(walletId)?.positions || [];
+}
+
+function getWalletPnL(walletId: string): number {
+  return trackedWallets.get(walletId)?.totalPnL || 0;
+}
 
 interface MarketAnalysis {
   marketId: string;
