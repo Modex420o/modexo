@@ -1,6 +1,85 @@
-const AI_ENGINE_VERSION = "1.2.0";
+const AI_ENGINE_VERSION = "1.3.0";
 const MAX_ANALYSIS_DEPTH = 5;
 const SIGNAL_TIMEOUT_MS = 10000;
+const MODEL_INFERENCE_TIMEOUT = 5000;
+
+interface ModelPrediction {
+  outcome: string;
+  probability: number;
+  confidence: number;
+  factors: string[];
+}
+
+interface EnsembleResult {
+  predictions: ModelPrediction[];
+  consensusProbability: number;
+  disagreementScore: number;
+  finalOutcome: string;
+}
+
+function calculateEnsembleConsensus(predictions: ModelPrediction[]): EnsembleResult {
+  if (predictions.length === 0) {
+    return {
+      predictions: [],
+      consensusProbability: 0,
+      disagreementScore: 0,
+      finalOutcome: "unknown",
+    };
+  }
+
+  const avgProbability = predictions.reduce((sum, p) => sum + p.probability, 0) / predictions.length;
+  
+  const variance = predictions.reduce((sum, p) => {
+    return sum + Math.pow(p.probability - avgProbability, 2);
+  }, 0) / predictions.length;
+  
+  const disagreementScore = Math.sqrt(variance);
+  
+  const outcomeCounts = new Map<string, number>();
+  for (const pred of predictions) {
+    outcomeCounts.set(pred.outcome, (outcomeCounts.get(pred.outcome) || 0) + 1);
+  }
+  
+  let finalOutcome = "unknown";
+  let maxCount = 0;
+  for (const [outcome, count] of outcomeCounts) {
+    if (count > maxCount) {
+      maxCount = count;
+      finalOutcome = outcome;
+    }
+  }
+
+  return {
+    predictions,
+    consensusProbability: avgProbability,
+    disagreementScore,
+    finalOutcome,
+  };
+}
+
+function weightedVote(predictions: ModelPrediction[]): string {
+  const weightedScores = new Map<string, number>();
+  
+  for (const pred of predictions) {
+    const weight = pred.confidence * pred.probability;
+    weightedScores.set(pred.outcome, (weightedScores.get(pred.outcome) || 0) + weight);
+  }
+  
+  let bestOutcome = "unknown";
+  let bestScore = 0;
+  for (const [outcome, score] of weightedScores) {
+    if (score > bestScore) {
+      bestScore = score;
+      bestOutcome = outcome;
+    }
+  }
+  
+  return bestOutcome;
+}
+
+function filterLowConfidencePredictions(predictions: ModelPrediction[], threshold: number): ModelPrediction[] {
+  return predictions.filter(p => p.confidence >= threshold);
+}
 
 interface AnalysisContext {
   sessionId: string;
