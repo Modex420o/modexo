@@ -264,3 +264,51 @@ export const insertAgentExecutionSchema = createInsertSchema(agentExecutions).om
 
 export type InsertAgentExecution = z.infer<typeof insertAgentExecutionSchema>;
 export type AgentExecution = typeof agentExecutions.$inferSelect;
+
+export interface PortfolioHolding {
+  tokenAddress: string;
+  symbol: string;
+  name: string;
+  imageUrl?: string;
+  balance: number;
+  decimals: number;
+  priceUsd: number;
+  valueUsd: number;
+  priceChange24h: number;
+  avgBuyPrice?: number;
+  pnlUsd?: number;
+  pnlPercent?: number;
+  allocation: number;
+}
+
+export interface PortfolioSummary {
+  walletAddress: string;
+  totalValueUsd: number;
+  totalPnlUsd: number;
+  totalPnlPercent: number;
+  solBalance: number;
+  tokenCount: number;
+  riskScore: number;
+  diversificationScore: number;
+  holdings: PortfolioHolding[];
+  allocationByCategory: { category: string; value: number; percent: number }[];
+  performanceHistory: { timestamp: number; valueUsd: number }[];
+}
+
+export const portfolioSnapshots = pgTable("portfolio_snapshots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  walletAddress: text("wallet_address").notNull(),
+  totalValueUsd: real("total_value_usd").notNull(),
+  solBalance: real("sol_balance").notNull(),
+  tokenCount: integer("token_count").notNull(),
+  snapshotData: text("snapshot_data"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertPortfolioSnapshotSchema = createInsertSchema(portfolioSnapshots).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertPortfolioSnapshot = z.infer<typeof insertPortfolioSnapshotSchema>;
+export type PortfolioSnapshot = typeof portfolioSnapshots.$inferSelect;
