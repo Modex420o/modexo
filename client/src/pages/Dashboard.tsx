@@ -31,7 +31,8 @@ import {
   Wallet,
   PieChart,
   Target,
-  TrendingDown
+  TrendingDown,
+  Droplets
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -147,13 +148,22 @@ const agents: Agent[] = [
     capabilities: ['Outcome Simulation', 'Win Rate Analysis', 'Probability Engine', 'Smart Predictions']
   },
   {
-    id: 'x402-sniper',
-    name: 'x402 Sniper Agent',
-    description: 'Autonomous agent that snipes new token launches with configurable parameters and safety checks.',
-    icon: Radio,
-    status: 'coming_soon',
+    id: 'x402-entry',
+    name: 'x402 Smart Entry Agent',
+    description: 'AI-powered entry point advisor that analyzes price action, volume patterns, and market momentum to identify optimal buy zones.',
+    icon: Target,
+    status: 'online',
     category: 'AI Utility',
-    capabilities: ['Auto-Buy', 'Slippage Control', 'Gas Optimization']
+    capabilities: ['Entry Zones', 'Volume Analysis', 'Support Levels', 'Momentum Score']
+  },
+  {
+    id: 'x402-liquidity',
+    name: 'x402 Liquidity Scanner',
+    description: 'Deep liquidity analysis that evaluates pool depth, concentration risk, slippage estimates, and DEX distribution.',
+    icon: Droplets,
+    status: 'online',
+    category: 'AI Utility',
+    capabilities: ['Pool Depth', 'Slippage Estimates', 'Concentration Risk', 'Health Score']
   },
   {
     id: 'x402-portfolio',
@@ -1954,6 +1964,703 @@ function PortfolioTerminalOutput({ onClose }: { onClose: () => void }) {
   );
 }
 
+interface SmartEntryResult {
+  tokenAddress: string;
+  symbol: string;
+  name: string;
+  currentPrice: number;
+  imageUrl: string | null;
+  entryZones: {
+    optimal: number;
+    aggressive: number;
+    conservative: number;
+  };
+  signals: {
+    type: 'bullish' | 'bearish' | 'neutral';
+    strength: number;
+    reasons: string[];
+  };
+  volumeAnalysis: {
+    h1Volume: number;
+    h24Volume: number;
+    volumeTrend: 'increasing' | 'decreasing' | 'stable';
+    buyPressure: number;
+  };
+  momentum: {
+    score: number;
+    trend: 'up' | 'down' | 'sideways';
+    strength: 'strong' | 'moderate' | 'weak';
+  };
+  support: {
+    level1: number;
+    level2: number;
+  };
+  recommendation: 'strong_buy' | 'buy' | 'wait' | 'avoid';
+  confidence: number;
+  liquidityUsd: number;
+  marketCap: number;
+}
+
+function SmartEntryTerminalOutput({ onClose }: { onClose: () => void }) {
+  const [tokenAddress, setTokenAddress] = useState("");
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [result, setResult] = useState<SmartEntryResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const analyzeEntry = async () => {
+    if (!tokenAddress.trim()) return;
+    
+    setIsAnalyzing(true);
+    setError(null);
+    setResult(null);
+
+    try {
+      const response = await fetch("/api/smart-entry/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tokenAddress: tokenAddress.trim() }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to analyze entry points");
+      }
+
+      const data = await response.json();
+      setResult(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const getRecommendationColor = (rec: string) => {
+    switch (rec) {
+      case 'strong_buy': return 'text-emerald-400 bg-emerald-500/20 border-emerald-500/30';
+      case 'buy': return 'text-green-400 bg-green-500/20 border-green-500/30';
+      case 'wait': return 'text-yellow-400 bg-yellow-500/20 border-yellow-500/30';
+      case 'avoid': return 'text-red-400 bg-red-500/20 border-red-500/30';
+      default: return 'text-white/60 bg-white/10 border-white/20';
+    }
+  };
+
+  const getSignalColor = (type: string) => {
+    switch (type) {
+      case 'bullish': return 'text-emerald-400';
+      case 'bearish': return 'text-red-400';
+      default: return 'text-yellow-400';
+    }
+  };
+
+  const getMomentumColor = (trend: string) => {
+    switch (trend) {
+      case 'up': return 'text-emerald-400';
+      case 'down': return 'text-red-400';
+      default: return 'text-yellow-400';
+    }
+  };
+
+  const formatPrice = (price: number) => {
+    if (price < 0.0000001) return price.toExponential(2);
+    if (price < 0.00001) return price.toExponential(3);
+    if (price < 0.001) return price.toFixed(6);
+    if (price < 1) return price.toFixed(4);
+    return price.toFixed(2);
+  };
+
+  const formatVolume = (vol: number) => {
+    if (vol >= 1e6) return `$${(vol / 1e6).toFixed(2)}M`;
+    if (vol >= 1e3) return `$${(vol / 1e3).toFixed(1)}K`;
+    return `$${vol.toFixed(0)}`;
+  };
+
+  return (
+    <div className="bg-[#0a0a0a] border border-white/10 rounded-xl overflow-hidden" data-testid="smart-entry-terminal">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-[#0f0f0f]">
+        <div className="flex items-center gap-3">
+          <div className="flex gap-1.5">
+            <div className="w-3 h-3 rounded-full bg-red-500/80" />
+            <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
+            <div className="w-3 h-3 rounded-full bg-emerald-500/80" />
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <Terminal className="w-4 h-4 text-primary" />
+            <span className="text-white/70 font-mono">agent://x402-smart-entry</span>
+            <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px]">
+              READY
+            </Badge>
+          </div>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onClose}
+          className="h-7 w-7 p-0 hover:bg-white/10"
+          data-testid="button-close-smart-entry"
+        >
+          <X className="w-4 h-4" />
+        </Button>
+      </div>
+
+      <ScrollArea className="h-[600px]">
+        <div className="p-6 space-y-6">
+          <div className="space-y-3">
+            <div className="text-xs text-white/40 font-mono">
+              <span className="text-primary">$</span> x402-SmartEntryAdvisor v1.0.0
+            </div>
+            <div className="text-xs text-white/60">
+              Enter a Solana token address to analyze optimal entry points, momentum, and buy signals.
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <Input
+              placeholder="Token address (e.g., EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v)"
+              value={tokenAddress}
+              onChange={(e) => setTokenAddress(e.target.value)}
+              className="flex-1 bg-white/5 border-white/10 text-white font-mono text-sm"
+              data-testid="input-token-address"
+              onKeyDown={(e) => e.key === 'Enter' && analyzeEntry()}
+            />
+            <Button
+              onClick={analyzeEntry}
+              disabled={isAnalyzing || !tokenAddress.trim()}
+              className="bg-primary hover:bg-primary/90"
+              data-testid="button-analyze-entry"
+            >
+              {isAnalyzing ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Analyzing...
+                </>
+              ) : (
+                <>
+                  <Target className="w-4 h-4 mr-2" />
+                  Analyze Entry
+                </>
+              )}
+            </Button>
+          </div>
+
+          {error && (
+            <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+              {error}
+            </div>
+          )}
+
+          {result && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between p-4 rounded-lg bg-white/5 border border-white/10">
+                <div className="flex items-center gap-3">
+                  {result.imageUrl && (
+                    <img src={result.imageUrl} alt={result.symbol} className="w-10 h-10 rounded-full" />
+                  )}
+                  <div>
+                    <div className="font-bold text-white text-lg">{result.symbol}</div>
+                    <div className="text-xs text-white/50">{result.name}</div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs text-white/40 mb-1">Current Price</div>
+                  <div className="text-xl font-bold text-white font-mono">${formatPrice(result.currentPrice)}</div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-center gap-4 p-4 rounded-lg bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20">
+                <div className="text-center">
+                  <div className="text-xs text-white/40 mb-1">Recommendation</div>
+                  <Badge className={`text-sm px-3 py-1 ${getRecommendationColor(result.recommendation)}`}>
+                    {result.recommendation.replace('_', ' ').toUpperCase()}
+                  </Badge>
+                </div>
+                <div className="h-8 w-px bg-white/10" />
+                <div className="text-center">
+                  <div className="text-xs text-white/40 mb-1">Confidence</div>
+                  <div className="text-lg font-bold text-primary">{result.confidence.toFixed(0)}%</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4">
+                <div className="p-3 sm:p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex sm:flex-col items-center sm:items-stretch justify-between sm:justify-start sm:text-center">
+                  <div className="text-xs text-white/40 sm:mb-2">Aggressive <span className="text-white/30">(-1%)</span></div>
+                  <div className="text-base sm:text-lg font-bold text-emerald-400 font-mono truncate">${formatPrice(result.entryZones.aggressive)}</div>
+                </div>
+                <div className="p-3 sm:p-4 rounded-lg bg-primary/10 border border-primary/20 flex sm:flex-col items-center sm:items-stretch justify-between sm:justify-start sm:text-center">
+                  <div className="text-xs text-white/40 sm:mb-2">Optimal <span className="text-white/30">(-3%)</span></div>
+                  <div className="text-base sm:text-lg font-bold text-primary font-mono truncate">${formatPrice(result.entryZones.optimal)}</div>
+                </div>
+                <div className="p-3 sm:p-4 rounded-lg bg-blue-500/10 border border-blue-500/20 flex sm:flex-col items-center sm:items-stretch justify-between sm:justify-start sm:text-center">
+                  <div className="text-xs text-white/40 sm:mb-2">Conservative <span className="text-white/30">(-7%)</span></div>
+                  <div className="text-base sm:text-lg font-bold text-blue-400 font-mono truncate">${formatPrice(result.entryZones.conservative)}</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Activity className="w-4 h-4 text-primary" />
+                    <span className="text-sm text-white/70">Signal Analysis</span>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-xs text-white/40">Type</span>
+                      <span className={`text-xs font-bold ${getSignalColor(result.signals.type)}`}>
+                        {result.signals.type.toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-xs text-white/40">Strength</span>
+                      <span className="text-xs font-mono text-white">{result.signals.strength}%</span>
+                    </div>
+                    <div className="mt-3 space-y-1">
+                      {result.signals.reasons.slice(0, 3).map((reason, i) => (
+                        <div key={i} className="text-xs text-white/50 flex items-start gap-1">
+                          <span className="text-primary">•</span>
+                          <span>{reason}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+                  <div className="flex items-center gap-2 mb-3">
+                    <TrendingUp className="w-4 h-4 text-primary" />
+                    <span className="text-sm text-white/70">Momentum</span>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-xs text-white/40">Score</span>
+                      <span className="text-xs font-mono text-white">{result.momentum.score}/100</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-xs text-white/40">Trend</span>
+                      <span className={`text-xs font-bold ${getMomentumColor(result.momentum.trend)}`}>
+                        {result.momentum.trend.toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-xs text-white/40">Strength</span>
+                      <span className="text-xs text-white">{result.momentum.strength}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+                  <div className="flex items-center gap-2 mb-3">
+                    <PieChart className="w-4 h-4 text-primary" />
+                    <span className="text-sm text-white/70">Volume Analysis</span>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-xs text-white/40">1H Volume</span>
+                      <span className="text-xs font-mono text-white">{formatVolume(result.volumeAnalysis.h1Volume)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-xs text-white/40">24H Volume</span>
+                      <span className="text-xs font-mono text-white">{formatVolume(result.volumeAnalysis.h24Volume)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-xs text-white/40">Trend</span>
+                      <span className={`text-xs ${result.volumeAnalysis.volumeTrend === 'increasing' ? 'text-emerald-400' : result.volumeAnalysis.volumeTrend === 'decreasing' ? 'text-red-400' : 'text-yellow-400'}`}>
+                        {result.volumeAnalysis.volumeTrend}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-xs text-white/40">Buy Pressure</span>
+                      <span className={`text-xs ${result.volumeAnalysis.buyPressure > 55 ? 'text-emerald-400' : result.volumeAnalysis.buyPressure < 45 ? 'text-red-400' : 'text-yellow-400'}`}>
+                        {result.volumeAnalysis.buyPressure.toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Shield className="w-4 h-4 text-primary" />
+                    <span className="text-sm text-white/70">Support Levels</span>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-xs text-white/40">Support 1</span>
+                      <span className="text-xs font-mono text-emerald-400">${formatPrice(result.support.level1)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-xs text-white/40">Support 2</span>
+                      <span className="text-xs font-mono text-blue-400">${formatPrice(result.support.level2)}</span>
+                    </div>
+                    <div className="flex justify-between mt-2">
+                      <span className="text-xs text-white/40">Liquidity</span>
+                      <span className="text-xs font-mono text-white">{formatVolume(result.liquidityUsd)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-xs text-white/40">Market Cap</span>
+                      <span className="text-xs font-mono text-white">{formatVolume(result.marketCap)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-xs text-yellow-400/80">
+                ⚠️ This is AI-generated analysis for educational purposes only. Not financial advice. Always DYOR.
+              </div>
+            </div>
+          )}
+        </div>
+      </ScrollArea>
+
+      <div className="px-4 py-3 border-t border-white/5 bg-[#080808]">
+        <div className="text-xs font-mono text-white/30">
+          Powered by MODEXO x402 Smart Entry Agent • Data via DexScreener
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface LiquidityResult {
+  tokenAddress: string;
+  symbol: string;
+  name: string;
+  imageUrl: string | null;
+  currentPrice: number;
+  liquidity: {
+    totalUsd: number;
+    baseAmount: number;
+    quoteAmount: number;
+    depth: 'deep' | 'moderate' | 'shallow' | 'critical';
+  };
+  concentration: {
+    riskLevel: 'low' | 'medium' | 'high' | 'extreme';
+    topPoolShare: number;
+    poolCount: number;
+  };
+  slippage: {
+    estimated1k: number;
+    estimated10k: number;
+    estimated50k: number;
+  };
+  metrics: {
+    liquidityToMcap: number;
+    volumeToLiquidity: number;
+    healthScore: number;
+  };
+  dexDistribution: Array<{
+    name: string;
+    liquidity: number;
+    share: number;
+  }>;
+  warnings: string[];
+  recommendation: 'safe' | 'moderate' | 'caution' | 'avoid';
+}
+
+function LiquidityTerminalOutput({ onClose }: { onClose: () => void }) {
+  const [tokenAddress, setTokenAddress] = useState("");
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [result, setResult] = useState<LiquidityResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const analyzeLiquidity = async () => {
+    if (!tokenAddress.trim()) return;
+    
+    setIsAnalyzing(true);
+    setError(null);
+    setResult(null);
+
+    try {
+      const response = await fetch("/api/liquidity/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tokenAddress: tokenAddress.trim() }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to analyze liquidity");
+      }
+
+      const data = await response.json();
+      setResult(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const getRecommendationColor = (rec: string) => {
+    switch (rec) {
+      case 'safe': return 'text-emerald-400 bg-emerald-500/20 border-emerald-500/30';
+      case 'moderate': return 'text-yellow-400 bg-yellow-500/20 border-yellow-500/30';
+      case 'caution': return 'text-orange-400 bg-orange-500/20 border-orange-500/30';
+      case 'avoid': return 'text-red-400 bg-red-500/20 border-red-500/30';
+      default: return 'text-white/60 bg-white/10 border-white/20';
+    }
+  };
+
+  const getDepthColor = (depth: string) => {
+    switch (depth) {
+      case 'deep': return 'text-emerald-400';
+      case 'moderate': return 'text-yellow-400';
+      case 'shallow': return 'text-orange-400';
+      case 'critical': return 'text-red-400';
+      default: return 'text-white/60';
+    }
+  };
+
+  const getRiskColor = (risk: string) => {
+    switch (risk) {
+      case 'low': return 'text-emerald-400';
+      case 'medium': return 'text-yellow-400';
+      case 'high': return 'text-orange-400';
+      case 'extreme': return 'text-red-400';
+      default: return 'text-white/60';
+    }
+  };
+
+  const formatUsd = (val: number) => {
+    if (val >= 1e6) return `$${(val / 1e6).toFixed(2)}M`;
+    if (val >= 1e3) return `$${(val / 1e3).toFixed(1)}K`;
+    return `$${val.toFixed(0)}`;
+  };
+
+  return (
+    <div className="bg-[#0a0a0a] border border-white/10 rounded-xl overflow-hidden" data-testid="liquidity-terminal">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-[#0f0f0f]">
+        <div className="flex items-center gap-3">
+          <div className="flex gap-1.5">
+            <div className="w-3 h-3 rounded-full bg-red-500/80" />
+            <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
+            <div className="w-3 h-3 rounded-full bg-emerald-500/80" />
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <Terminal className="w-4 h-4 text-primary" />
+            <span className="text-white/70 font-mono">agent://x402-liquidity</span>
+            <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px]">
+              READY
+            </Badge>
+          </div>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onClose}
+          className="h-7 w-7 p-0 hover:bg-white/10"
+          data-testid="button-close-liquidity"
+        >
+          <X className="w-4 h-4" />
+        </Button>
+      </div>
+
+      <ScrollArea className="h-[600px]">
+        <div className="p-6 space-y-6">
+          <div className="space-y-3">
+            <div className="text-xs text-white/40 font-mono">
+              <span className="text-primary">$</span> x402-LiquidityScanner v1.0.0
+            </div>
+            <div className="text-xs text-white/60">
+              Enter a Solana token address to analyze liquidity depth, concentration risk, and slippage estimates.
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <Input
+              placeholder="Token address (e.g., EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v)"
+              value={tokenAddress}
+              onChange={(e) => setTokenAddress(e.target.value)}
+              className="flex-1 bg-white/5 border-white/10 text-white font-mono text-sm"
+              data-testid="input-liquidity-address"
+              onKeyDown={(e) => e.key === 'Enter' && analyzeLiquidity()}
+            />
+            <Button
+              onClick={analyzeLiquidity}
+              disabled={isAnalyzing || !tokenAddress.trim()}
+              className="bg-primary hover:bg-primary/90"
+              data-testid="button-analyze-liquidity"
+            >
+              {isAnalyzing ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Scanning...
+                </>
+              ) : (
+                <>
+                  <Droplets className="w-4 h-4 mr-2" />
+                  Scan Liquidity
+                </>
+              )}
+            </Button>
+          </div>
+
+          {error && (
+            <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+              {error}
+            </div>
+          )}
+
+          {result && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between p-4 rounded-lg bg-white/5 border border-white/10">
+                <div className="flex items-center gap-3">
+                  {result.imageUrl && (
+                    <img src={result.imageUrl} alt={result.symbol} className="w-10 h-10 rounded-full" />
+                  )}
+                  <div>
+                    <div className="font-bold text-white text-lg">{result.symbol}</div>
+                    <div className="text-xs text-white/50">{result.name}</div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs text-white/40 mb-1">Total Liquidity</div>
+                  <div className="text-xl font-bold text-white font-mono">{formatUsd(result.liquidity.totalUsd)}</div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-center gap-4 p-4 rounded-lg bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20">
+                <div className="text-center">
+                  <div className="text-xs text-white/40 mb-1">Safety Rating</div>
+                  <Badge className={`text-sm px-3 py-1 ${getRecommendationColor(result.recommendation)}`}>
+                    {result.recommendation.toUpperCase()}
+                  </Badge>
+                </div>
+                <div className="h-8 w-px bg-white/10" />
+                <div className="text-center">
+                  <div className="text-xs text-white/40 mb-1">Health Score</div>
+                  <div className="text-lg font-bold text-primary">{result.metrics.healthScore}/100</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4">
+                <div className="p-3 sm:p-4 rounded-lg bg-white/5 border border-white/10 flex sm:flex-col items-center sm:items-stretch justify-between sm:justify-start sm:text-center">
+                  <div className="text-xs text-white/40 sm:mb-2">Depth</div>
+                  <div className={`text-base sm:text-lg font-bold ${getDepthColor(result.liquidity.depth)}`}>
+                    {result.liquidity.depth.toUpperCase()}
+                  </div>
+                </div>
+                <div className="p-3 sm:p-4 rounded-lg bg-white/5 border border-white/10 flex sm:flex-col items-center sm:items-stretch justify-between sm:justify-start sm:text-center">
+                  <div className="text-xs text-white/40 sm:mb-2">Concentration Risk</div>
+                  <div className={`text-base sm:text-lg font-bold ${getRiskColor(result.concentration.riskLevel)}`}>
+                    {result.concentration.riskLevel.toUpperCase()}
+                  </div>
+                </div>
+                <div className="p-3 sm:p-4 rounded-lg bg-white/5 border border-white/10 flex sm:flex-col items-center sm:items-stretch justify-between sm:justify-start sm:text-center">
+                  <div className="text-xs text-white/40 sm:mb-2">Pool Count</div>
+                  <div className="text-base sm:text-lg font-bold text-white">{result.concentration.poolCount}</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Activity className="w-4 h-4 text-primary" />
+                    <span className="text-sm text-white/70">Slippage Estimates</span>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-xs text-white/40">$1K Trade</span>
+                      <span className={`text-xs font-mono ${result.slippage.estimated1k < 1 ? 'text-emerald-400' : result.slippage.estimated1k < 3 ? 'text-yellow-400' : 'text-red-400'}`}>
+                        ~{result.slippage.estimated1k.toFixed(2)}%
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-xs text-white/40">$10K Trade</span>
+                      <span className={`text-xs font-mono ${result.slippage.estimated10k < 2 ? 'text-emerald-400' : result.slippage.estimated10k < 5 ? 'text-yellow-400' : 'text-red-400'}`}>
+                        ~{result.slippage.estimated10k.toFixed(2)}%
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-xs text-white/40">$50K Trade</span>
+                      <span className={`text-xs font-mono ${result.slippage.estimated50k < 5 ? 'text-emerald-400' : result.slippage.estimated50k < 10 ? 'text-yellow-400' : 'text-red-400'}`}>
+                        ~{result.slippage.estimated50k.toFixed(2)}%
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+                  <div className="flex items-center gap-2 mb-3">
+                    <PieChart className="w-4 h-4 text-primary" />
+                    <span className="text-sm text-white/70">Metrics</span>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-xs text-white/40">Liq/MCap Ratio</span>
+                      <span className="text-xs font-mono text-white">{result.metrics.liquidityToMcap.toFixed(2)}%</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-xs text-white/40">Vol/Liq Ratio</span>
+                      <span className="text-xs font-mono text-white">{result.metrics.volumeToLiquidity.toFixed(2)}%</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-xs text-white/40">Top Pool Share</span>
+                      <span className="text-xs font-mono text-white">{result.concentration.topPoolShare.toFixed(1)}%</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {result.dexDistribution.length > 0 && (
+                <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Globe className="w-4 h-4 text-primary" />
+                    <span className="text-sm text-white/70">DEX Distribution</span>
+                  </div>
+                  <div className="space-y-2">
+                    {result.dexDistribution.map((dex, i) => (
+                      <div key={i} className="flex items-center justify-between">
+                        <span className="text-xs text-white/60">{dex.name}</span>
+                        <div className="flex items-center gap-2">
+                          <div className="w-20 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-primary rounded-full" 
+                              style={{ width: `${Math.min(dex.share, 100)}%` }} 
+                            />
+                          </div>
+                          <span className="text-xs font-mono text-white/60 w-16 text-right">{formatUsd(dex.liquidity)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {result.warnings.length > 0 && (
+                <div className="p-4 rounded-lg bg-orange-500/10 border border-orange-500/20">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertTriangle className="w-4 h-4 text-orange-400" />
+                    <span className="text-sm text-orange-400">Warnings</span>
+                  </div>
+                  <div className="space-y-1">
+                    {result.warnings.map((warning, i) => (
+                      <div key={i} className="text-xs text-orange-400/80 flex items-start gap-1">
+                        <span className="text-orange-400">•</span>
+                        <span>{warning}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-xs text-yellow-400/80">
+                ⚠️ This is AI-generated analysis for educational purposes only. Not financial advice. Always DYOR.
+              </div>
+            </div>
+          )}
+        </div>
+      </ScrollArea>
+
+      <div className="px-4 py-3 border-t border-white/5 bg-[#080808]">
+        <div className="text-xs font-mono text-white/30">
+          Powered by MODEXO x402 Liquidity Scanner • Data via DexScreener
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const AGENT_CATEGORIES = ["AI Utility", "Marketing x402", "B2B x402", "Verification"] as const;
 
 export default function Dashboard() {
@@ -2011,6 +2718,10 @@ export default function Dashboard() {
               <KYCAMLTerminalOutput onClose={() => setActiveAgent(null)} />
             ) : activeAgent === 'x402-portfolio' ? (
               <PortfolioTerminalOutput onClose={() => setActiveAgent(null)} />
+            ) : activeAgent === 'x402-entry' ? (
+              <SmartEntryTerminalOutput onClose={() => setActiveAgent(null)} />
+            ) : activeAgent === 'x402-liquidity' ? (
+              <LiquidityTerminalOutput onClose={() => setActiveAgent(null)} />
             ) : (
               <AgentTerminalOutput 
                 agentId={activeAgent} 
